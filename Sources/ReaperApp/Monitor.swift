@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import Darwin
 import Foundation
 import ReaperCore
@@ -110,7 +111,19 @@ final class Monitor: ObservableObject {
 
     @Published private(set) var snapshot: Snapshot?
     @Published private(set) var ownCPUPercent: Double = 0
+    /// Result of the last action, shown in the footer for a few seconds.
     @Published private(set) var lastAction: String?
+    private var actionClear: Task<Void, Never>?
+
+    private func report(_ text: String) {
+        lastAction = text
+        actionClear?.cancel()
+        actionClear = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(Theme.ease) { self.lastAction = nil }
+        }
+    }
     @Published private(set) var busy: Set<String> = []
     /// CPU share per compose project, measured over at least `idleWindow`.
     @Published private(set) var dockerCPU: [String: Double] = [:]
@@ -280,7 +293,7 @@ final class Monitor: ObservableObject {
             }
             let gone = ordered.filter { !Reaper.isSame($0.proc) }.count
             await MainActor.run {
-                self.lastAction = String(localized: "Reaped \(gone) procs · \(Format.bytes(total))")
+                self.report(String(localized: "Reaped \(gone) procs · \(Format.bytes(total))"))
                 self.refresh()
             }
         }
@@ -311,9 +324,9 @@ final class Monitor: ObservableObject {
             let left = await Task.detached { ProcReader.all().filter { pids.contains($0.pid) } }.value
             let remaining = left.reduce(0) { $0 + $1.footprint }
             let released = group.footprint - min(group.footprint, remaining)
-            lastAction = app.isTerminated
+            report(app.isTerminated
                 ? String(localized: "Quit \(group.name) · \(Format.bytes(released)) released")
-                : String(localized: "\(group.name) did not quit (open dialog?)")
+                : String(localized: "\(group.name) did not quit (open dialog?)"))
             busy.remove(group.name)
             refresh()
         }
@@ -336,7 +349,7 @@ final class Monitor: ObservableObject {
                         ? String(localized: "\(now.name) −\(Format.bytes(before.footprint - now.footprint))")
                         : String(localized: "\(now.name) kept its memory so far"))
                 }
-                self.lastAction = text
+                self.report(text)
                 self.busy.remove(stack.id)
                 self.lastDockerScan = 0
                 self.refresh()

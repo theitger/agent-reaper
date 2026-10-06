@@ -166,12 +166,6 @@ private struct Leftovers: View {
             } else {
                 ForEach(snap.sessions) { AgentRow(group: $0, monitor: monitor) }
             }
-            if let action = monitor.lastAction {
-                Text(verbatim: action)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.greenTone.strong)
-            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -418,10 +412,21 @@ private struct Footer: View {
             SettingRow(title: "Open at login", isOn: $monitor.openAtLogin)
             LanguageRow()
             HStack {
-                Text(verbatim: String(format: "reaper · %@ · %.1f%%", Format.bytes(snap.ownFootprint), monitor.ownCPUPercent))
-                    .font(.system(size: 11))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.textFaint)
+                // The last action's result takes this spot for a few seconds.
+                Group {
+                    if let action = monitor.lastAction {
+                        Text(verbatim: action)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.textBody)
+                    } else {
+                        Text(verbatim: String(format: "reaper · %@ · %.1f%%", Format.bytes(snap.ownFootprint), monitor.ownCPUPercent))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.textFaint)
+                    }
+                }
+                .monospacedDigit()
+                .lineLimit(1)
+                .transition(.opacity)
                 Spacer()
                 Button { NSWorkspace.shared.open(Log.url) } label: {
                     Text("Log").font(.system(size: 11)).foregroundStyle(Theme.textDim)
