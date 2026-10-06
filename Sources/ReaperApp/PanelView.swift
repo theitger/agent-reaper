@@ -100,7 +100,7 @@ private struct Header: View {
     /// What one click could give back right now.
     private var freeable: String? {
         var parts: [String] = []
-        let orphans = snap.sessions.filter { $0.status == .orphan }
+        let orphans = snap.sessions.flatMap(\.browsers).filter { $0.status == .orphan }
         if !orphans.isEmpty {
             let bytes = orphans.reduce(0) { $0 + $1.footprint }
             parts.append(String(localized: "\(orphans.count) orphaned browsers \(Format.bytes(bytes))"))
@@ -164,7 +164,7 @@ private struct Leftovers: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textFaint)
             } else {
-                ForEach(snap.sessions) { SessionRow(group: $0, monitor: monitor) }
+                ForEach(snap.sessions) { AgentRow(group: $0, monitor: monitor) }
             }
             if let action = monitor.lastAction {
                 Text(verbatim: action)
@@ -178,60 +178,94 @@ private struct Leftovers: View {
     }
 }
 
-private struct SessionRow: View {
-    let group: SessionGroup
+private func statusBadge(_ status: Status) -> (String, Theme.Tone, String) {
+    switch status {
+    case .orphan:
+        return (String(localized: "orphaned"), Theme.orange,
+                String(localized: "Its agent session has ended. Safe to reap."))
+    case .alive:
+        return (String(localized: "active"), Theme.greenTone,
+                String(localized: "Its agent session is still running. Hands off."))
+    case .unknown:
+        return (String(localized: "unclear"), Theme.neutral,
+                String(localized: "No proof yet that it is abandoned. Shown, not touched."))
+    }
+}
+
+/// One agent session: repository, agent, browsers. Click to see each browser.
+private struct AgentRow: View {
+    let group: AgentGroup
     @ObservedObject var monitor: Monitor
     @State private var hover = false
-
-    private var badge: (String, Theme.Tone, String) {
-        switch group.status {
-        case .orphan:
-            return (String(localized: "orphaned"), Theme.orange,
-                    String(localized: "Its agent session has ended. Safe to reap."))
-        case .alive:
-            return (String(localized: "active"), Theme.greenTone,
-                    String(localized: "Its agent session is still running. Hands off."))
-        case .unknown:
-            return (String(localized: "unclear"), Theme.neutral,
-                    String(localized: "No proof yet that it is abandoned. Shown, not touched."))
-        }
-    }
+    @State private var expanded = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(verbatim: "agent-browser")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text(verbatim: group.browserSession)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.textMuted)
-                        .lineLimit(1)
+        let badge = statusBadge(group.status)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(verbatim: group.project)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if let agent = group.agent {
+                            Text(verbatim: agent.rawValue)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Theme.textMuted)
+                        }
+                    }
+                    HStack(spacing: 4) {
+                        Text(verbatim: detail)
+                            .font(.system(size: 11))
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.textDim)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(Theme.textFaint)
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                    }
                 }
-                Text(verbatim: detail)
-                    .font(.system(size: 11))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.textDim)
-                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if hover, !group.orphans.isEmpty {
+                    QuietButton(title: "Reap") { monitor.reap(group.orphans) }
+                } else {
+                    Badge(text: badge.0, tone: badge.1)
+                }
             }
-            Spacer(minLength: 8)
-            if hover, group.status != .alive {
-                QuietButton(title: "Reap") { monitor.reap(group.leftovers) }
-            } else {
-                Badge(text: badge.0, tone: badge.1)
+            if expanded {
+                ForEach(group.browsers) { b in
+                    HStack(spacing: 8) {
+                        Text(verbatim: b.name)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.textBody)
+                        Text(verbatim: String(localized: "\(b.leftovers.count) procs"))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.textFaint)
+                        Spacer()
+                        Text(verbatim: Format.bytes(b.footprint))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.textMuted)
+                    }
+                    .monospacedDigit()
+                    .padding(.leading, 12)
+                    .help(statusBadge(b.status).2 + "\n" + b.reason)
+                }
             }
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
+        .onTapGesture { withAnimation(Theme.ease) { expanded.toggle() } }
         .onHover { hover = $0 }
-        .help(badge.2 + "\n" + group.reason)
+        .help(badge.2)
     }
 
     private var detail: String {
         let now = UInt64(Date().timeIntervalSince1970 * 1_000_000)
         let age = Format.age(now > group.start ? now - group.start : 0)
-        return String(localized: "\(group.leftovers.count) procs · \(Format.bytes(group.footprint)) · \(age)")
+        return String(localized: "\(group.browsers.count) browsers · \(Format.bytes(group.footprint)) · \(age)")
     }
 }
 

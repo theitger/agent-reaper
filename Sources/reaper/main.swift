@@ -55,7 +55,7 @@ case "ls":
         let rows = leftovers.map { l -> [String: Any] in
             ["pid": l.proc.pid, "status": l.status.rawValue, "kind": l.kind.rawValue,
              "reason": l.reason, "footprint": l.proc.footprint, "start": l.proc.start,
-             "session": l.session ?? NSNull(), "path": l.proc.path]
+             "session": l.session ?? NSNull(), "agent": l.agent?.rawValue ?? NSNull(), "path": l.proc.path]
         }
         let data = try! JSONSerialization.data(withJSONObject: rows, options: [.prettyPrinted, .sortedKeys])
         print(String(decoding: data, as: UTF8.self))

@@ -4,35 +4,82 @@ import Foundation
 import ReaperCore
 import ServiceManagement
 
-/// All leftovers of one agent-browser session: daemon, Chrome and helpers.
-struct SessionGroup: Identifiable {
+/// All processes of one agent-browser session: daemon, Chrome and helpers.
+struct BrowserGroup: Identifiable {
     let id: String
-    let browserSession: String
+    let name: String
     let status: Status
     let reason: String
     let leftovers: [Leftover]
     let footprint: UInt64
+
+    var orphans: [Leftover] { leftovers.filter { $0.status == .orphan } }
+}
+
+/// Everything one agent session left running, however many browsers it
+/// opened. Titled by the repository it worked in, not by a session id.
+struct AgentGroup: Identifiable {
+    let id: String
+    let agent: Agent?
+    let project: String
+    let browsers: [BrowserGroup]
+    let status: Status
+    let footprint: UInt64
     let start: UInt64
 
-    static func group(_ leftovers: [Leftover]) -> [SessionGroup] {
-        let byKey = Dictionary(grouping: leftovers) { l in
-            "\(l.session ?? "-")/\(l.proc.env?["AGENT_BROWSER_SESSION"] ?? "default")"
-        }
-        return byKey.map { key, ls in
-            let statuses = Set(ls.map(\.status))
-            let status: Status = statuses.contains(.alive) ? .alive : statuses == [.orphan] ? .orphan : .unknown
-            let lead = ls.first { $0.kind == .agentBrowser } ?? ls[0]
-            return SessionGroup(
+    var orphans: [Leftover] { browsers.flatMap(\.orphans) }
+    var processCount: Int { browsers.reduce(0) { $0 + $1.leftovers.count } }
+
+    static func group(_ leftovers: [Leftover]) -> [AgentGroup] {
+        let bySession = Dictionary(grouping: leftovers) { "\($0.agent?.rawValue ?? "-")/\($0.session ?? "-")" }
+        return bySession.map { key, ls in
+            let browsers = Dictionary(grouping: ls) { $0.proc.env?["AGENT_BROWSER_SESSION"] ?? "default" }
+                .map { name, bls -> BrowserGroup in
+                    let statuses = Set(bls.map(\.status))
+                    let lead = bls.first { $0.kind == .agentBrowser } ?? bls[0]
+                    return BrowserGroup(id: key + "/" + name, name: name, status: combined(statuses),
+                                        reason: lead.reason, leftovers: bls,
+                                        footprint: bls.reduce(0) { $0 + $1.proc.footprint })
+                }
+                .sorted { $0.footprint > $1.footprint }
+            let pwd = ls.lazy.compactMap { $0.proc.env?["PWD"] }.first
+            return AgentGroup(
                 id: key,
-                browserSession: lead.proc.env?["AGENT_BROWSER_SESSION"] ?? "default",
-                status: status,
-                reason: lead.reason,
-                leftovers: ls,
-                footprint: ls.reduce(0) { $0 + $1.proc.footprint },
+                agent: ls[0].agent,
+                project: pwd.map(repoName) ?? String(localized: "Unknown origin"),
+                browsers: browsers,
+                status: combined(Set(browsers.map(\.status))),
+                footprint: browsers.reduce(0) { $0 + $1.footprint },
                 start: ls.map(\.proc.start).min() ?? 0
             )
         }
         .sorted { ($0.status == .orphan ? 0 : 1, $1.footprint) < ($1.status == .orphan ? 0 : 1, $0.footprint) }
+    }
+
+    /// Anything alive keeps the whole group's badge on "active"; reaping
+    /// still only ever touches the orphaned part.
+    private static func combined(_ s: Set<Status>) -> Status {
+        s.contains(.alive) ? .alive : s.contains(.orphan) ? .orphan : .unknown
+    }
+
+    private static var repoCache: [String: String] = [:]
+    private static let cacheLock = NSLock()
+
+    /// The enclosing git checkout's folder name; the folder itself if none.
+    static func repoName(_ pwd: String) -> String {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        if let hit = repoCache[pwd] { return hit }
+        var dir = URL(fileURLWithPath: pwd)
+        var name = dir.lastPathComponent
+        while dir.path != "/" && dir.path != NSHomeDirectory() {
+            if FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) {
+                name = dir.lastPathComponent
+                break
+            }
+            dir.deleteLastPathComponent()
+        }
+        repoCache[pwd] = name
+        return name
     }
 }
 
@@ -40,7 +87,7 @@ struct Snapshot {
     var sample: SystemSample
     var activity: Activity
     var diagnosis: Diagnosis
-    var sessions: [SessionGroup]
+    var sessions: [AgentGroup]
     var apps: [AppGroup]
     var allApps: [AppGroup]
     /// nil: no engine reachable.
@@ -49,7 +96,7 @@ struct Snapshot {
     var ownFootprint: UInt64
     var ownCPU: UInt64
 
-    var orphans: [Leftover] { sessions.filter { $0.status == .orphan }.flatMap(\.leftovers) }
+    var orphans: [Leftover] { sessions.flatMap(\.orphans) }
 
     /// The VM that holds the containers' memory, as macOS sees it.
     var dockerVM: AppGroup? {
@@ -211,7 +258,7 @@ final class Monitor: ObservableObject {
             sample: sample,
             activity: activity,
             diagnosis: Diagnosis.make(sample: sample, activity: activity, orphans: orphans),
-            sessions: SessionGroup.group(leftovers),
+            sessions: AgentGroup.group(leftovers),
             apps: Array(listed.prefix(8)),
             allApps: apps,
             docker: withDocker ? Docker.stacks() : nil,
@@ -303,7 +350,7 @@ final class Monitor: ObservableObject {
         for l in orphans {
             let key = "\(l.proc.pid)/\(l.proc.start)"
             guard loggedOrphans.insert(key).inserted else { continue }
-            Log.write("would reap \(l.proc.pid) \(l.kind.rawValue) \(Format.bytes(l.proc.footprint)) [\(l.reason)] session=\(l.session ?? "-")")
+            Log.write("would reap \(l.proc.pid) \(l.kind.rawValue) \(Format.bytes(l.proc.footprint)) [\(l.reason)] \(l.agent?.rawValue ?? "no agent") session=\(l.session ?? "-")")
         }
     }
 

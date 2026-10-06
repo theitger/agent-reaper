@@ -29,12 +29,27 @@ public enum Status: String, Sendable, Codable {
     case unknown
 }
 
+/// The coding agent whose session started a process.
+public enum Agent: String, Sendable, Codable {
+    case claude = "Claude"
+    case codex = "Codex"
+
+    /// The innermost agent wins: Codex started from a Claude shell inherits
+    /// CLAUDE_PID, but the browser belongs to the Codex session.
+    static func owner(of env: [String: String]?) -> (Agent, String?)? {
+        if let id = env?["CODEX_SESSION_ID"] { return (.codex, id) }
+        if env?["CLAUDE_PID"] != nil { return (.claude, env?["CLAUDE_CODE_SESSION_ID"]) }
+        return nil
+    }
+}
+
 public struct Leftover: Sendable {
     public let proc: Proc
     public let kind: LeftoverKind
     public let status: Status
     public let reason: String
-    /// CLAUDE_CODE_SESSION_ID of the session that started it, if known.
+    public let agent: Agent?
+    /// The agent's session id (CLAUDE_CODE_SESSION_ID or CODEX_SESSION_ID).
     public let session: String?
 }
 
@@ -63,12 +78,40 @@ public struct LeftoverFinder {
 
     public func find(in procs: [Proc]) -> [Leftover] {
         let agentRunning = procs.contains { $0.name == "claude" }
+        let codexStarts = procs.filter { $0.name == "codex" || $0.name.hasPrefix("codex-") }.map(\.start)
         return procs.compactMap { p in
             guard let kind = LeftoverKind.of(path: p.path, home: home) else { return nil }
-            let (status, reason) = judge(p, agentRunning: agentRunning)
+            let owner = Agent.owner(of: p.env)
+            let (status, reason) = owner?.0 == .codex
+                ? judgeCodex(session: owner?.1, codexStarts: codexStarts)
+                : judge(p, agentRunning: agentRunning)
             return Leftover(proc: p, kind: kind, status: status, reason: reason,
-                            session: p.env?["CLAUDE_CODE_SESSION_ID"])
+                            agent: owner?.0, session: owner?.1)
         }
+    }
+
+    /// Codex puts no PID into the environment, only CODEX_SESSION_ID, a
+    /// UUIDv7 whose first 48 bits are its creation time in ms. A session can
+    /// only live inside a codex process; `codex resume` reopens an old id in
+    /// a new process, so a mismatch in time is never proof of death.
+    func judgeCodex(session: String?, codexStarts: [UInt64]) -> (Status, String) {
+        if codexStarts.isEmpty { return (.orphan, "codex session ended (no codex running)") }
+        guard let created = session.flatMap(Self.uuidV7Micros) else {
+            return (.unknown, "codex running, session not identifiable")
+        }
+        // The process that opened the session starts a moment before it.
+        if codexStarts.contains(where: { $0 <= created + 2_000_000 && created - min(created, $0) <= 120_000_000 }) {
+            return (.alive, "codex session alive")
+        }
+        return (.unknown, "another codex process is running; it may have resumed this session")
+    }
+
+    /// Creation time in µs from a UUIDv7 string, nil if it is not one.
+    static func uuidV7Micros(_ id: String) -> UInt64? {
+        let hex = id.replacingOccurrences(of: "-", with: "")
+        guard hex.count == 32, hex[hex.index(hex.startIndex, offsetBy: 12)] == "7",
+              let ms = UInt64(hex.prefix(12), radix: 16) else { return nil }
+        return ms * 1000
     }
 
     func judge(_ p: Proc, agentRunning: Bool) -> (Status, String) {

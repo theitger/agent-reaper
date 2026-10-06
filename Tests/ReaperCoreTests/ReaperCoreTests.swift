@@ -78,6 +78,30 @@ final class LeftoverTests: XCTestCase {
         XCTAssertEqual(f.find(in: [young]).first?.status, .orphan)
     }
 
+    func testCodexOwnerWinsOverInheritedClaude() {
+        let id = "01a11194-ed21-7573-a5f2-42c8b41fbddf"
+        let env = ["CLAUDE_PID": "7", "CODEX_SESSION_ID": id, "AGENT_BROWSER_SESSION": "x"]
+        let created = LeftoverFinder.uuidV7Micros(id)!
+        let codex = Proc(pid: 50, ppid: 1, uid: getuid(), start: created - 1_000_000, path: "/opt/homebrew/bin/codex",
+                         args: [], env: nil, footprint: 0, cpuNanos: 0)
+        // Claude (7) is alive, but the browser belongs to Codex.
+        let f = finder(alive: [7])
+        let l = f.find(in: [proc(daemon, env: env), codex]).first!
+        XCTAssertEqual(l.agent, .codex)
+        XCTAssertEqual(l.status, .alive)
+        // Codex gone: orphan, even though Claude still runs.
+        XCTAssertEqual(f.find(in: [proc(daemon, env: env)]).first?.status, .orphan)
+        // Another, older codex process: could be a resume, so hands off.
+        let older = Proc(pid: 51, ppid: 1, uid: getuid(), start: created - 3_600_000_000, path: "/opt/homebrew/bin/codex",
+                         args: [], env: nil, footprint: 0, cpuNanos: 0)
+        XCTAssertEqual(f.find(in: [proc(daemon, env: env), older]).first?.status, .unknown)
+    }
+
+    func testUUIDv7Time() {
+        XCTAssertEqual(LeftoverFinder.uuidV7Micros("01a11194-ed21-7573-a5f2-42c8b41fbddf"), 0x01a11194ed21 * 1000)
+        XCTAssertNil(LeftoverFinder.uuidV7Micros("9aaac636-2dbe-443f-9c8f-ee15fc29528c"))
+    }
+
     func testNoEnvFallsBackToAge() {
         let f = finder(alive: [])
         XCTAssertEqual(f.find(in: [proc(daemon, env: nil, ageHours: 1)]).first?.status, .unknown)

@@ -31,8 +31,10 @@ Requires macOS 14 or later.
   not how full swap is: a full swap file costs nothing until macOS reads
   it back.
 - **Agent processes.** `agent-browser` daemons and their Chrome for
-  Testing instances, grouped per session. Each is marked *orphaned*,
-  *active* or *unclear* (see below). Orphans can be reaped with one click.
+  Testing instances, one row per agent session (Claude Code or Codex),
+  titled by the repository it worked in. Click a row to see its browsers.
+  Each is marked *orphaned*, *active* or *unclear* (see below). Orphans
+  can be reaped with one click.
 - **Docker.** Running compose stacks with memory, age and an *idle* badge
   (under 0.5 % CPU for 30 s). Stopped on click only, never automatically.
   After a stop Reaper measures whether the VM actually gave memory back.
@@ -45,10 +47,21 @@ Hover any value for an explanation. English and German; switch under
 
 ## How orphans are detected
 
-Processes started from a Claude Code session inherit `CLAUDE_PID`. Reaper
-reads the environment of your own processes (`sysctl KERN_PROCARGS2`) and
-checks whether that Claude process still exists, comparing start times so
-a reused PID does not count as alive.
+Reaper reads the environment of your own processes (`sysctl
+KERN_PROCARGS2`) to find which agent session started them. When agents are
+nested (Codex run from a Claude shell), the innermost one counts.
+
+**Claude Code** passes `CLAUDE_PID` to everything it starts. Reaper checks
+whether that process still exists, comparing start times so a reused PID
+does not count as alive.
+
+**Codex** passes `CODEX_SESSION_ID` but no PID. The id is a UUIDv7, which
+carries its creation time. If no codex process runs at all, the session
+has ended. If one started together with the session, it is active. Any
+other codex process might have resumed the session (`codex resume`), so
+the browser is left alone.
+
+For Claude sessions:
 
 - Session still running: *active*, never touched.
 - Session gone and the browser ran under its own `AGENT_BROWSER_SESSION`:

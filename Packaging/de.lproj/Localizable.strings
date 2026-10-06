@@ -65,3 +65,6 @@
 "active" = "aktiv";
 "unclear" = "unklar";
 "Available: RAM not used by apps, wired or compressed memory.\nSwap-in: data read back from disk per second. This is what you feel." = "Verfügbar: RAM, der nicht von Apps, fixiertem oder komprimiertem Speicher belegt ist.\nSwap-in: pro Sekunde von der Platte zurückgelesene Daten. Das spürst du.";
+"Unknown origin" = "Herkunft unbekannt";
+"%lld procs" = "%lld Prozesse";
+"%lld browsers · %@ · %@" = "%lld Browser · %@ · %@";
