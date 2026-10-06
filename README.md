@@ -30,7 +30,7 @@ Requires macOS 14 or later.
   status dot follows the kernel's memory pressure and the swap-in rate,
   not how full swap is: a full swap file costs nothing until macOS reads
   it back.
-- **Agent processes.** `agent-browser` daemons and their Chrome for
+- **Started by agents.** `agent-browser` daemons and their Chrome for
   Testing instances, one row per agent session (Claude Code or Codex),
   titled by the repository it worked in. Click a row to see its browsers.
   Each is marked *orphaned*, *active* or *unclear* (see below). Orphans

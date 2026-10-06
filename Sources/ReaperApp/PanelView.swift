@@ -149,8 +149,8 @@ private struct Leftovers: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                SectionLabel(title: "Agent processes")
-                    .help(String(localized: "Processes started by AI agents (agent-browser and its Chrome). Orphaned means the session that started them has ended."))
+                SectionLabel(title: "Started by agents")
+                    .help(String(localized: "What coding agents started and left running (for now agent-browser and its Chrome), grouped by the agent session. The agents themselves are listed under Apps. Orphaned means the session has ended."))
                 Spacer()
                 let orphans = snap.orphans
                 if !orphans.isEmpty {

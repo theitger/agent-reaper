@@ -39,7 +39,6 @@
 "Memory is overbooked: macOS keeps moving data to disk and back. Apps stall while it does." = "Speicher ist überbucht: macOS schiebt ständig Daten auf die Platte und zurück. Apps hängen solange.";
 "macOS reports memory pressure or reads data back from swap. Short stalls are possible." = "macOS meldet Speicherdruck oder liest Daten aus dem Swap zurück. Kurze Hänger sind möglich.";
 "Pressure: macOS's own verdict (normal, warning, critical).\nSwap-in: data read back from disk per second. This is what you feel.\nSwap: data parked on disk. A full swap alone is harmless." = "Druck: das Urteil von macOS selbst (normal, erhöht, kritisch).\nSwap-in: pro Sekunde von der Platte zurückgelesene Daten. Das spürst du.\nSwap: auf der Platte geparkte Daten. Voller Swap allein schadet nicht.";
-"Processes started by AI agents (agent-browser and its Chrome). Orphaned means the session that started them has ended." = "Prozesse, die AI-Agents gestartet haben (agent-browser und sein Chrome). Verwaist heißt: Die Session, die sie gestartet hat, ist beendet.";
 "Its agent session has ended. Safe to reap." = "Die Agent-Session ist beendet. Kann weg.";
 "Its agent session is still running. Hands off." = "Die Agent-Session läuft noch. Finger weg.";
 "No proof yet that it is abandoned. Shown, not touched." = "Noch kein Beweis, dass er verwaist ist. Wird angezeigt, nicht angefasst.";
@@ -60,7 +59,6 @@
 "CPU throttled" = "CPU gedrosselt";
 "memory pressure" = "Speicherdruck";
 "Can be freed: %@" = "Freigebbar: %@";
-"Agent processes" = "Agent-Prozesse";
 "None." = "Keine.";
 "active" = "aktiv";
 "unclear" = "unklar";
@@ -68,3 +66,5 @@
 "Unknown origin" = "Herkunft unbekannt";
 "%lld procs" = "%lld Prozesse";
 "%lld browsers · %@ · %@" = "%lld Browser · %@ · %@";
+"Started by agents" = "Von Agents gestartet";
+"What coding agents started and left running (for now agent-browser and its Chrome), grouped by the agent session. The agents themselves are listed under Apps. Orphaned means the session has ended." = "Was Coding-Agents gestartet haben und weiterläuft (bisher agent-browser mit Chrome), gruppiert nach Agent-Session. Die Agents selbst stehen unter Apps. Verwaist heißt: Die Session ist beendet.";
