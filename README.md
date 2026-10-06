@@ -13,11 +13,13 @@ waits for your click. Every action reports the memory it actually freed. No "fre
 brew tap theitger/tap
 brew trust theitger/tap        # Homebrew ≥ 6 requires tap trust
 brew install --cask agent-reaper
-xattr -dr com.apple.quarantine /Applications/Reaper.app
 ```
 
-The last line is needed because the app is ad-hoc signed (no Apple
-Developer certificate). Without it Gatekeeper blocks the first launch.
+The app is ad-hoc signed (no Apple Developer certificate), so the cask
+clears the quarantine flag after installing; otherwise Gatekeeper would
+block the first launch. The download is pinned by its SHA-256 in the
+cask. Installing the zip from the release page by hand instead needs
+`xattr -dr com.apple.quarantine /Applications/Reaper.app`.
 
 Requires macOS 14 or later.
 
